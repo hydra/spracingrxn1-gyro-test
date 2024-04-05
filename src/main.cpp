@@ -1,9 +1,19 @@
 #include <Arduino.h>
 #include "ICM42605.h"
 
-// an ICM42605 object with the ICM42605 sensor on VSPI bus 0 and chip select pin 10
+static const uint8_t CS_PIN = 5;
+static const uint8_t INT_PIN = 38;
+
+// an ICM42605 object with the ICM42605 sensor on VSPI bus 0
 SPIClass vspi = SPIClass(VSPI);
-ICM42605 IMU(vspi, 5);
+ICM42605 imu(vspi, CS_PIN);
+
+volatile bool dataReady = false;
+
+
+void setImuFlag() {
+  dataReady = true;
+}
 
 void setup() {
   // serial to display data
@@ -11,7 +21,7 @@ void setup() {
   while(!Serial) {}
 
   // start communication with IMU
-  int status = IMU.begin();
+  int status = imu.begin();
   if (status < 0) {
     Serial.println("IMU initialization unsuccessful");
     Serial.println("Check IMU wiring or try cycling power");
@@ -19,25 +29,41 @@ void setup() {
     Serial.println(status);
     while(1) {}
   }
+
+  // attaching the interrupt to microcontroller pin INT_PIN
+  pinMode(INT_PIN, INPUT);
+  attachInterrupt(INT_PIN, setImuFlag, RISING);
+
+  // set output data rate to 12.5 Hz
+  imu.setAccelODR(ICM42605::odr12_5);
+  imu.setGyroODR(ICM42605::odr12_5);
+
+  // enabling the data ready interrupt
+  imu.enableDataReadyInterrupt(); 
+
   Serial.println("ax,ay,az,gx,gy,gz,temp_C");
 }
 
 void loop() {
+  if (!dataReady) return;
+
+  dataReady = false;
+
   // read the sensor
-  IMU.getAGT();
+  imu.getAGT();
+  
   // display the data
-  Serial.print(IMU.accX(),6);
+  Serial.print(imu.accX(),6);
   Serial.print("\t");
-  Serial.print(IMU.accY(),6);
+  Serial.print(imu.accY(),6);
   Serial.print("\t");
-  Serial.print(IMU.accZ(),6);
+  Serial.print(imu.accZ(),6);
   Serial.print("\t");
-  Serial.print(IMU.gyrX(),6);
+  Serial.print(imu.gyrX(),6);
   Serial.print("\t");
-  Serial.print(IMU.gyrY(),6);
+  Serial.print(imu.gyrY(),6);
   Serial.print("\t");
-  Serial.print(IMU.gyrZ(),6);
+  Serial.print(imu.gyrZ(),6);
   Serial.print("\t");
-  Serial.println(IMU.temp(),6);
-  delay(100);
+  Serial.println(imu.temp(),6);
 }
